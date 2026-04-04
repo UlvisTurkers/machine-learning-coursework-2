@@ -27,7 +27,7 @@ from typing import Callable
 import numpy as np
 from sklearn.cluster import KMeans, MiniBatchKMeans
 
-from .typicality import compute_typicality
+from .typicality import compute_typicality, compute_typicality_cosine
 
 
 # ---------------------------------------------------------------------------
@@ -223,6 +223,109 @@ class TypiClust:
         # ----------------------------------------------------------------
         # Step 7: final fallback — random unlabeled samples
         # ----------------------------------------------------------------
+        if len(selected) < budget_B:
+            already = set(selected) | labeled_set
+            remaining = [i for i in range(self._N) if i not in already]
+            rng = np.random.default_rng(self.seed)
+            n_fill = min(budget_B - len(selected), len(remaining))
+            fill = rng.choice(remaining, size=n_fill, replace=False).tolist()
+            selected.extend(fill)
+
+        return np.array(selected[:budget_B], dtype=np.int64)
+
+
+# ---------------------------------------------------------------------------
+# TypiClust with Cosine Similarity (modified variant)
+# ---------------------------------------------------------------------------
+
+class TypiClustCosine(TypiClust):
+    """
+    Modified TypiClust: replaces Euclidean typicality with cosine-similarity
+    typicality.
+
+    The clustering step is identical to the original TypiClust (K-Means on
+    L2-normalised features — equivalent to spherical K-Means).  Only the
+    within-cluster typicality scoring changes:
+
+    Original : Typicality(x) = ( mean_{KNN} ||x - x_i||_2 )^{-1}
+    Modified : Typicality(x) = mean_{KNN} cos_sim(x, x_i)
+
+    KNN is also computed using cosine distance instead of Euclidean.
+
+    Rationale: SimCLR features are L2-normalised and live on a hypersphere.
+    While Euclidean distance on the unit sphere is a monotone transform of
+    cosine distance, the *aggregation* differs:  inverse-of-mean-distance
+    (Euclidean) vs mean-of-similarities (cosine).  The cosine variant avoids
+    the non-linear 1/x transform that amplifies the effect of outlier
+    distances, potentially making the score more robust.
+
+    All constructor arguments and the ``select()`` interface are identical to
+    :class:`TypiClust`.
+    """
+
+    def _score_cluster(self, members, k_nn):
+        """Override: use cosine typicality instead of Euclidean."""
+        cluster_feats = self.features[members]
+        return compute_typicality_cosine(cluster_feats, k=k_nn)
+
+    def select(
+        self,
+        budget_B: int,
+        labeled_indices: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Identical algorithm to TypiClust.select, but calls cosine typicality."""
+        if labeled_indices is None:
+            labeled_indices = np.array([], dtype=np.int64)
+        labeled_indices = np.asarray(labeled_indices, dtype=np.int64)
+
+        n_labeled = len(labeled_indices)
+        budget_B  = min(budget_B, self._N - n_labeled)
+        if budget_B <= 0:
+            return np.array([], dtype=np.int64)
+
+        K = min(n_labeled + budget_B, self.max_clusters)
+        K = max(K, 1)
+
+        cluster_labels = _kmeans(K, self.features, self.seed)
+        labeled_set = set(labeled_indices.tolist())
+
+        cluster_members = {c: [] for c in range(K)}
+        for idx in range(self._N):
+            cluster_members[cluster_labels[idx]].append(idx)
+
+        uncovered = []
+        for c_id, members in cluster_members.items():
+            if not any(m in labeled_set for m in members):
+                uncovered.append((c_id, members))
+
+        uncovered.sort(key=lambda x: len(x[1]), reverse=True)
+
+        selected = []
+        skipped  = []
+
+        for c_id, members in uncovered:
+            if len(selected) >= budget_B:
+                break
+            cluster_size = len(members)
+            if cluster_size < self.min_cluster_size:
+                skipped.append((c_id, members))
+                continue
+            k_nn = min(20, cluster_size)
+            # ── THE KEY DIFFERENCE: cosine typicality ──
+            scores = self._score_cluster(members, k_nn)
+            best_local = int(np.argmax(scores))
+            selected.append(members[best_local])
+
+        if len(selected) < budget_B:
+            skipped.sort(key=lambda x: len(x[1]), reverse=True)
+            for c_id, members in skipped:
+                if len(selected) >= budget_B:
+                    break
+                k_nn = min(20, len(members))
+                scores = self._score_cluster(members, k_nn)
+                best_local = int(np.argmax(scores))
+                selected.append(members[best_local])
+
         if len(selected) < budget_B:
             already = set(selected) | labeled_set
             remaining = [i for i in range(self._N) if i not in already]
