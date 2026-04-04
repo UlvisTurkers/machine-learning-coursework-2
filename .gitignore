@@ -1,0 +1,22 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Python Caches
+__pycache__/
+*.py[cod]
+
+# Data and Models (Crucial for ML)
+data/
+*.zip
+*.tar.gz
+*.pth
+*.pt
+
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE settings
+.vscode/
+.idea/
