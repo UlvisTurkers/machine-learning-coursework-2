@@ -15,7 +15,8 @@ from torch.utils.data import DataLoader, Subset, TensorDataset
 from torchvision import transforms
 from tqdm import tqdm
 
-from .resnet import LinearClassifier, SimCLREncoder
+from .resnet import LinearClassifier
+from .simclr import SimCLRModel
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +136,7 @@ def evaluate_linear_probe(
 def train_classifier(
     train_dataset,
     labelled_indices: np.ndarray,
-    encoder: SimCLREncoder,
+    encoder: SimCLRModel,
     num_classes: int = 10,
     epochs: int = 50,
     batch_size: int = 64,
@@ -150,7 +151,7 @@ def train_classifier(
     Args:
         train_dataset:    Full training dataset (returns PIL images).
         labelled_indices: Indices within train_dataset to use for training.
-        encoder:          Pre-trained SimCLREncoder (backbone frozen).
+        encoder:          Pre-trained SimCLRModel (backbone frozen).
         num_classes:      Number of output classes.
         epochs:           Training epochs.
         batch_size:       Mini-batch size.

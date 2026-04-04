@@ -12,11 +12,10 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
+from torchvision import datasets
 from tqdm import tqdm
 
-from .resnet import SimCLREncoder
+from .simclr import SimCLRModel
 
 
 # ---------------------------------------------------------------------------
@@ -54,64 +53,27 @@ def load_cifar10(root: str = "./data") -> tuple:
 # Feature extraction
 # ---------------------------------------------------------------------------
 
-@torch.no_grad()
 def extract_features(
     dataset,
-    encoder: SimCLREncoder,
-    batch_size: int = 256,
+    encoder: SimCLRModel,
+    batch_size: int = 512,
     device: torch.device | None = None,
     num_workers: int = 2,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Run a forward pass through `encoder.encoder` to get backbone features.
+    Extract L2-normalised 512-dim backbone features for every sample in `dataset`.
 
-    Args:
-        dataset: Dataset returning (PIL Image, label) pairs.
-        encoder: Trained SimCLREncoder.
-        batch_size: Inference batch size.
-        device:  Torch device.
-        num_workers: DataLoader workers.
+    Delegates to `simclr.get_features`; kept here as a convenience import for
+    notebooks that do `from src.utils import extract_features`.
 
     Returns:
-        features: np.ndarray of shape (N, D).
-        labels:   np.ndarray of shape (N,).
+        features: np.ndarray (N, 512), L2-normalised, float32.
+        labels:   np.ndarray (N,), int64.
     """
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.4914, 0.4822, 0.4465],
-                             std=[0.2023, 0.1994, 0.2010]),
-    ])
-
-    class _Wrapped(torch.utils.data.Dataset):
-        def __init__(self, ds):
-            self.ds = ds
-
-        def __len__(self):
-            return len(self.ds)
-
-        def __getitem__(self, idx):
-            img, label = self.ds[idx]
-            return transform(img), label
-
-    loader = DataLoader(
-        _Wrapped(dataset),
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        pin_memory=True,
-    )
-
-    encoder = encoder.to(device).eval()
-    all_feats, all_labels = [], []
-    for xb, yb in tqdm(loader, desc="Extracting features", leave=False):
-        feats = encoder.encoder(xb.to(device)).flatten(1).cpu().numpy()
-        all_feats.append(feats)
-        all_labels.append(yb.numpy())
-
-    return np.concatenate(all_feats), np.concatenate(all_labels)
+    from .simclr import get_features as _get_features
+    return _get_features(encoder, dataset,
+                         batch_size=batch_size, device=device,
+                         num_workers=num_workers)
 
 
 # ---------------------------------------------------------------------------
