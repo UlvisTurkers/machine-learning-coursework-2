@@ -1,14 +1,9 @@
-"""
-End-to-end validation of the TPC_RP active learning pipeline.
-
-Run from repo root:
-    python -m tests.test_pipeline
-
-Or from the tests/ directory:
-    python test_pipeline.py
-
-Prints PASS/FAIL for each test.  Exits with code 1 if any test fails.
-"""
+# End-to-end validation of the TPC_RP active learning pipeline.
+#
+# Run from repo root:
+#     python -m tests.test_pipeline
+#
+# Prints PASS/FAIL for each test. Exits with code 1 if any test fails.
 
 from __future__ import annotations
 
@@ -17,7 +12,6 @@ import os
 import time
 import traceback
 
-# ── Make sure `import src.*` works regardless of cwd ─────────────────────────
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
@@ -27,13 +21,27 @@ import torch
 from pathlib import Path
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# -- Helpers -----------------------------------------------------------------
 
-_results: list[tuple[str, bool, str]] = []   # (name, passed, detail)
+_results: list[tuple[str, bool, str]] = []
+
+
+class _Subset:
+    # Lightweight wrapper to truncate a dataset to N samples.
+    def __init__(self, ds, n):
+        self.ds = ds
+        self.n = n
+        self.targets = ds.targets[:n] if hasattr(ds, "targets") else None
+
+    def __len__(self):
+        return self.n
+
+    def __getitem__(self, idx):
+        return self.ds[idx]
 
 
 def run_test(name, fn):
-    """Run a test function; catch exceptions and record PASS/FAIL."""
+    # Run a single test, catch exceptions, record PASS/FAIL.
     print("\n" + "=" * 60)
     print("TEST: {}".format(name))
     print("=" * 60)
@@ -59,21 +67,9 @@ def test_simclr_features():
     from src.simclr import SimCLRModel, get_features
     from src.utils import load_cifar10
 
-    # Use a fresh (untrained) model — we're testing shape/norm, not quality.
+    # Use a fresh (untrained) model -- testing shape/norm, not quality.
     model = SimCLRModel()
-
     train_ds, _ = load_cifar10(root="data")
-
-    # Extract features for 100 images only (fast).
-    # Create a small subset dataset.
-    class _Subset:
-        def __init__(self, ds, n):
-            self.ds = ds
-            self.n = n
-        def __len__(self):
-            return self.n
-        def __getitem__(self, idx):
-            return self.ds[idx]
 
     subset = _Subset(train_ds, 100)
     feats, labels = get_features(model, subset, batch_size=50,
@@ -84,7 +80,7 @@ def test_simclr_features():
         "Expected shape (100, 512), got {}".format(feats.shape)
     print("  Feature shape: {} -- OK".format(feats.shape))
 
-    # Assert L2-normalised (norm ≈ 1.0 for each vector)
+    # Assert L2-normalised (norm ~ 1.0 for each vector)
     norms = np.linalg.norm(feats, axis=1)
     assert np.allclose(norms, 1.0, atol=1e-4), \
         "Norms not ~1.0: min={:.4f}, max={:.4f}".format(norms.min(), norms.max())
@@ -105,18 +101,16 @@ def test_simclr_features():
 def test_typicality():
     from src.typicality import compute_typicality, compute_typicality_cosine
 
-    # ── 2a. Synthetic 2D data with known density ─────────────────────────
+    # 2a. Synthetic 2D data with known density
     # Dense cluster at origin + sparse outlier far away.
     rng = np.random.default_rng(42)
-    dense_points = rng.normal(loc=0.0, scale=0.1, size=(30, 2))     # tight cluster
-    sparse_point = np.array([[10.0, 10.0]])                          # isolated outlier
+    dense_points = rng.normal(loc=0.0, scale=0.1, size=(30, 2))
+    sparse_point = np.array([[10.0, 10.0]])
     features = np.vstack([dense_points, sparse_point]).astype(np.float32)
 
     scores = compute_typicality(features, k=10)
 
-    # The point closest to the centre of the dense cluster should have the
-    # highest typicality (or close to it).
-    # The outlier (index 30) should have the LOWEST typicality.
+    # Outlier (index 30) should have the lowest typicality.
     outlier_score = scores[30]
     best_dense_score = scores[:30].max()
     assert outlier_score < best_dense_score, \
@@ -125,8 +119,7 @@ def test_typicality():
     print("  Densest point typicality ({:.4f}) > outlier ({:.6f}) -- OK".format(
         best_dense_score, outlier_score))
 
-    # ── 2b. K_nn capping ────────────────────────────────────────────────
-    # With only 5 points, k=20 should be clamped to k=4 (N-1).
+    # 2b. K_nn capping: with 5 points, k=20 should clamp to k=4 (N-1).
     small = rng.normal(size=(5, 2)).astype(np.float32)
     scores_small = compute_typicality(small, k=20)
     assert scores_small.shape == (5,), \
@@ -135,20 +128,18 @@ def test_typicality():
     print("  K_nn capping with N=5, k=20 -> scores shape {} -- OK".format(
         scores_small.shape))
 
-    # ── 2c. Single-point edge case ──────────────────────────────────────
+    # 2c. Single-point edge case
     single = np.array([[1.0, 2.0]])
     scores_single = compute_typicality(single, k=20)
     assert scores_single.shape == (1,), "Single-point shape wrong"
     assert np.isfinite(scores_single[0]), "Single-point score not finite"
     print("  Single-point edge case -- OK")
 
-    # ── 2d. Cosine variant ──────────────────────────────────────────────
-    # L2-normalise features, then check cosine typicality works.
+    # 2d. Cosine variant
     normed = features / np.linalg.norm(features, axis=1, keepdims=True)
     cos_scores = compute_typicality_cosine(normed, k=10)
     assert cos_scores.shape == (31,)
     assert np.all(np.isfinite(cos_scores)), "Non-finite cosine scores"
-    # Dense cluster should have higher mean cosine similarity than outlier.
     assert cos_scores[:30].mean() > cos_scores[30], \
         "Dense cluster cosine scores should exceed outlier"
     print("  Cosine typicality: dense mean={:.4f} > outlier={:.4f} -- OK".format(
@@ -173,24 +164,22 @@ def test_typiclust_selection():
     for c in centres:
         pts = rng.normal(loc=c, scale=0.3, size=(N_PER_CLUSTER, D)).astype(np.float32)
         clusters.append(pts)
-    features = np.vstack(clusters)  # (300, 10)
+    features = np.vstack(clusters)   # (300, 10)
 
     B = 3   # budget = number of clusters
 
-    # ── 3a. Euclidean TypiClust ──────────────────────────────────────────
+    # 3a. Euclidean TypiClust
     selector = TypiClust(features, max_clusters=500, min_cluster_size=5, seed=42)
     selected = selector.select(B, labeled_indices=None)
 
-    # Exactly B indices
     assert len(selected) == B, \
         "Expected {} indices, got {}".format(B, len(selected))
     print("  Returned exactly B={} indices -- OK".format(B))
 
-    # No repeats
     assert len(set(selected.tolist())) == B, "Duplicate indices!"
     print("  No duplicate indices -- OK")
 
-    # Selected indices should span different clusters (indices 0-99, 100-199, 200-299).
+    # Selected indices should span different clusters (0-99, 100-199, 200-299).
     cluster_ids = set()
     for idx in selected:
         cluster_ids.add(idx // N_PER_CLUSTER)
@@ -199,16 +188,15 @@ def test_typiclust_selection():
             len(cluster_ids), B, cluster_ids)
     print("  Selected from {} distinct clusters -- OK".format(len(cluster_ids)))
 
-    # ── 3b. Already-labeled exclusion ────────────────────────────────────
-    labeled = np.array([0, 100, 200], dtype=np.int64)  # one from each cluster
+    # 3b. Already-labeled exclusion
+    labeled = np.array([0, 100, 200], dtype=np.int64)
     selected2 = selector.select(B, labeled_indices=labeled)
     overlap = set(selected2.tolist()) & set(labeled.tolist())
     assert len(overlap) == 0, \
         "Selected indices overlap with labeled: {}".format(overlap)
     print("  Already-labeled exclusion -- OK")
 
-    # ── 3c. Cosine variant returns same shape ────────────────────────────
-    # L2-normalise for cosine.
+    # 3c. Cosine variant returns same shape
     normed = features / np.linalg.norm(features, axis=1, keepdims=True)
     cos_sel = TypiClustCosine(normed, max_clusters=500, min_cluster_size=5, seed=42)
     cos_selected = cos_sel.select(B, labeled_indices=None)
@@ -230,7 +218,7 @@ def test_classifier():
 
     clf = CIFARClassifier(num_classes=10, device=device, seed=42, num_workers=0)
 
-    # ── 4a. Train on 50 random examples for 5 epochs (fast) ─────────────
+    # 4a. Train on 50 random examples for 5 epochs (fast)
     rng = np.random.default_rng(42)
     indices = rng.choice(len(train_ds), size=50, replace=False).astype(np.int64)
 
@@ -241,19 +229,8 @@ def test_classifier():
     assert "train_acc" in hist and len(hist["train_acc"]) == 5
     print("  Training returned 5-epoch history -- OK")
 
-    # ── 4b. Evaluate — accuracy is float in [0, 100] ────────────────────
-    # Use a tiny subset of test set for speed.
-    class _SmallTest:
-        def __init__(self, ds, n):
-            self.ds = ds
-            self.n = n
-            self.targets = ds.targets[:n]
-        def __len__(self):
-            return self.n
-        def __getitem__(self, idx):
-            return self.ds[idx]
-
-    small_test = _SmallTest(test_ds, 200)
+    # 4b. Evaluate -- accuracy is float in [0, 100]
+    small_test = _Subset(test_ds, 200)
     eval_res = clf.evaluate(small_test, batch_size=100)
 
     acc = eval_res["accuracy"]
@@ -261,8 +238,7 @@ def test_classifier():
     assert 0.0 <= acc <= 100.0, "Accuracy out of range: {}".format(acc)
     print("  Accuracy = {:.2f}% (float in [0,100]) -- OK".format(acc))
 
-    # ── 4c. Weight re-initialisation ─────────────────────────────────────
-    # Capture a parameter, re-init, verify it changed.
+    # 4c. Weight re-initialisation
     w_before = clf.model.conv1.weight.data.clone()
     clf._reset_weights(seed=99)
     w_after = clf.model.conv1.weight.data.clone()
@@ -285,22 +261,11 @@ def test_full_pipeline():
     device = torch.device("cpu")
     train_ds, test_ds = load_cifar10(root="data")
 
-    # Use untrained SimCLR (we're testing pipeline plumbing, not quality).
+    # Untrained SimCLR -- testing pipeline plumbing, not quality.
     model = SimCLRModel()
 
-    # Extract features for a small subset (500 train, 200 test) for speed.
-    class _Sub:
-        def __init__(self, ds, n):
-            self.ds = ds
-            self.n = n
-            self.targets = ds.targets[:n] if hasattr(ds, "targets") else None
-        def __len__(self):
-            return self.n
-        def __getitem__(self, idx):
-            return self.ds[idx]
-
-    train_sub = _Sub(train_ds, 500)
-    test_sub  = _Sub(test_ds,  200)
+    train_sub = _Subset(train_ds, 500)
+    test_sub  = _Subset(test_ds, 200)
 
     train_feats, train_labels = get_features(model, train_sub, batch_size=100,
                                               device=device, num_workers=0)
@@ -323,9 +288,8 @@ def test_full_pipeline():
     acc = eval_res["accuracy"]
     print("  Test accuracy after 1 round: {:.2f}%".format(acc))
 
-    # With 10 labels and 5 epochs on random features, accuracy should at
-    # least beat 0% — it's a 10-class problem so random chance is 10%.
-    assert acc > 0.0, "Accuracy is 0% — model is broken"
+    # With 10 labels on a 10-class problem, accuracy should exceed 0%.
+    assert acc > 0.0, "Accuracy is 0% -- model is broken"
     print("  Accuracy > 0% (pipeline produces predictions) -- OK")
 
 
@@ -358,12 +322,12 @@ def test_reproducibility():
     print("  Run 2: {}".format(idx2.tolist()))
     print("  Identical -- OK")
 
-    # Also test that a different seed produces different results.
+    # Different seed should produce different results.
     set_seed(99)
     sel3 = TypiClust(features, max_clusters=500, min_cluster_size=5, seed=99)
     idx3 = sel3.select(10, labeled_indices=None)
     assert not np.array_equal(idx1, idx3), \
-        "Different seeds produced identical results — seeding may be broken"
+        "Different seeds produced identical results -- seeding may be broken"
     print("  Different seed -> different indices -- OK")
 
 
@@ -383,7 +347,7 @@ if __name__ == "__main__":
     run_test("5. Full Pipeline",             test_full_pipeline)
     run_test("6. Reproducibility",           test_reproducibility)
 
-    # ── Summary ──────────────────────────────────────────────────────────
+    # Summary
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)
