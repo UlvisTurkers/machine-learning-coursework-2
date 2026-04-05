@@ -1,8 +1,5 @@
 # End-to-end validation of the TPC_RP active learning pipeline.
-#
-# Run from repo root:
-#     python -m tests.test_pipeline
-#
+# Run from repo root: python -m tests.test_pipeline
 # Prints PASS/FAIL for each test. Exits with code 1 if any test fails.
 
 from __future__ import annotations
@@ -20,14 +17,11 @@ import numpy as np
 import torch
 from pathlib import Path
 
-
-# -- Helpers -----------------------------------------------------------------
-
 _results: list[tuple[str, bool, str]] = []
 
 
 class _Subset:
-    # Lightweight wrapper to truncate a dataset to N samples.
+    # lightweight wrapper to truncate a dataset to the first N samples
     def __init__(self, ds, n):
         self.ds = ds
         self.n = n
@@ -41,7 +35,6 @@ class _Subset:
 
 
 def run_test(name, fn):
-    # Run a single test, catch exceptions, record PASS/FAIL.
     print("\n" + "=" * 60)
     print("TEST: {}".format(name))
     print("=" * 60)
@@ -59,15 +52,12 @@ def run_test(name, fn):
         _results.append((name, False, str(e)))
 
 
-# =============================================================================
-#  1. SimCLR Feature Extraction
-# =============================================================================
+# 1. SimCLR feature extraction
 
 def test_simclr_features():
     from src.simclr import SimCLRModel, get_features
     from src.utils import load_cifar10
 
-    # Use a fresh (untrained) model -- testing shape/norm, not quality.
     model = SimCLRModel()
     train_ds, _ = load_cifar10(root="data")
 
@@ -75,34 +65,28 @@ def test_simclr_features():
     feats, labels = get_features(model, subset, batch_size=50,
                                  device=torch.device("cpu"), num_workers=0)
 
-    # Assert 512-dim
     assert feats.shape == (100, 512), \
         "Expected shape (100, 512), got {}".format(feats.shape)
     print("  Feature shape: {} -- OK".format(feats.shape))
 
-    # Assert L2-normalised (norm ~ 1.0 for each vector)
     norms = np.linalg.norm(feats, axis=1)
     assert np.allclose(norms, 1.0, atol=1e-4), \
         "Norms not ~1.0: min={:.4f}, max={:.4f}".format(norms.min(), norms.max())
     print("  Norms: min={:.6f}  max={:.6f}  mean={:.6f} -- OK".format(
         norms.min(), norms.max(), norms.mean()))
 
-    # Assert labels are ints in [0, 9]
     assert labels.dtype == np.int64, "Labels dtype: {}".format(labels.dtype)
     assert labels.min() >= 0 and labels.max() <= 9
     print("  Labels: dtype={}, range=[{}, {}] -- OK".format(
         labels.dtype, labels.min(), labels.max()))
 
 
-# =============================================================================
-#  2. Typicality Computation
-# =============================================================================
+# 2. Typicality computation
 
 def test_typicality():
     from src.typicality import compute_typicality, compute_typicality_cosine
 
-    # 2a. Synthetic 2D data with known density
-    # Dense cluster at origin + sparse outlier far away.
+    # dense cluster at origin + isolated outlier far away
     rng = np.random.default_rng(42)
     dense_points = rng.normal(loc=0.0, scale=0.1, size=(30, 2))
     sparse_point = np.array([[10.0, 10.0]])
@@ -110,7 +94,6 @@ def test_typicality():
 
     scores = compute_typicality(features, k=10)
 
-    # Outlier (index 30) should have the lowest typicality.
     outlier_score = scores[30]
     best_dense_score = scores[:30].max()
     assert outlier_score < best_dense_score, \
@@ -119,7 +102,7 @@ def test_typicality():
     print("  Densest point typicality ({:.4f}) > outlier ({:.6f}) -- OK".format(
         best_dense_score, outlier_score))
 
-    # 2b. K_nn capping: with 5 points, k=20 should clamp to k=4 (N-1).
+    # with only 5 points, k=20 should clamp to k=4
     small = rng.normal(size=(5, 2)).astype(np.float32)
     scores_small = compute_typicality(small, k=20)
     assert scores_small.shape == (5,), \
@@ -128,14 +111,14 @@ def test_typicality():
     print("  K_nn capping with N=5, k=20 -> scores shape {} -- OK".format(
         scores_small.shape))
 
-    # 2c. Single-point edge case
+    # single-point edge case
     single = np.array([[1.0, 2.0]])
     scores_single = compute_typicality(single, k=20)
     assert scores_single.shape == (1,), "Single-point shape wrong"
     assert np.isfinite(scores_single[0]), "Single-point score not finite"
     print("  Single-point edge case -- OK")
 
-    # 2d. Cosine variant
+    # cosine variant
     normed = features / np.linalg.norm(features, axis=1, keepdims=True)
     cos_scores = compute_typicality_cosine(normed, k=10)
     assert cos_scores.shape == (31,)
@@ -146,14 +129,12 @@ def test_typicality():
         cos_scores[:30].mean(), cos_scores[30]))
 
 
-# =============================================================================
-#  3. TypiClust Selection
-# =============================================================================
+# 3. TypiClust selection
 
 def test_typiclust_selection():
     from src.active_learning import TypiClust, TypiClustCosine
 
-    # Create synthetic data: 3 tight clusters in 10-dim space.
+    # 3 tight clusters in 10-dim space
     rng = np.random.default_rng(42)
     N_PER_CLUSTER = 100
     D = 10
@@ -164,11 +145,10 @@ def test_typiclust_selection():
     for c in centres:
         pts = rng.normal(loc=c, scale=0.3, size=(N_PER_CLUSTER, D)).astype(np.float32)
         clusters.append(pts)
-    features = np.vstack(clusters)   # (300, 10)
+    features = np.vstack(clusters)
 
-    B = 3   # budget = number of clusters
+    B = 3
 
-    # 3a. Euclidean TypiClust
     selector = TypiClust(features, max_clusters=500, min_cluster_size=5, seed=42)
     selected = selector.select(B, labeled_indices=None)
 
@@ -179,7 +159,7 @@ def test_typiclust_selection():
     assert len(set(selected.tolist())) == B, "Duplicate indices!"
     print("  No duplicate indices -- OK")
 
-    # Selected indices should span different clusters (0-99, 100-199, 200-299).
+    # check that selected indices span all 3 clusters
     cluster_ids = set()
     for idx in selected:
         cluster_ids.add(idx // N_PER_CLUSTER)
@@ -188,7 +168,7 @@ def test_typiclust_selection():
             len(cluster_ids), B, cluster_ids)
     print("  Selected from {} distinct clusters -- OK".format(len(cluster_ids)))
 
-    # 3b. Already-labeled exclusion
+    # already-labeled points should be excluded
     labeled = np.array([0, 100, 200], dtype=np.int64)
     selected2 = selector.select(B, labeled_indices=labeled)
     overlap = set(selected2.tolist()) & set(labeled.tolist())
@@ -196,7 +176,7 @@ def test_typiclust_selection():
         "Selected indices overlap with labeled: {}".format(overlap)
     print("  Already-labeled exclusion -- OK")
 
-    # 3c. Cosine variant returns same shape
+    # cosine variant should also return the right number of unique indices
     normed = features / np.linalg.norm(features, axis=1, keepdims=True)
     cos_sel = TypiClustCosine(normed, max_clusters=500, min_cluster_size=5, seed=42)
     cos_selected = cos_sel.select(B, labeled_indices=None)
@@ -205,9 +185,7 @@ def test_typiclust_selection():
     print("  TypiClustCosine: {} unique indices -- OK".format(B))
 
 
-# =============================================================================
-#  4. Classifier Training
-# =============================================================================
+# 4. Classifier training
 
 def test_classifier():
     from src.classifier import CIFARClassifier
@@ -218,7 +196,6 @@ def test_classifier():
 
     clf = CIFARClassifier(num_classes=10, device=device, seed=42, num_workers=0)
 
-    # 4a. Train on 50 random examples for 5 epochs (fast)
     rng = np.random.default_rng(42)
     indices = rng.choice(len(train_ds), size=50, replace=False).astype(np.int64)
 
@@ -229,7 +206,6 @@ def test_classifier():
     assert "train_acc" in hist and len(hist["train_acc"]) == 5
     print("  Training returned 5-epoch history -- OK")
 
-    # 4b. Evaluate -- accuracy is float in [0, 100]
     small_test = _Subset(test_ds, 200)
     eval_res = clf.evaluate(small_test, batch_size=100)
 
@@ -238,7 +214,7 @@ def test_classifier():
     assert 0.0 <= acc <= 100.0, "Accuracy out of range: {}".format(acc)
     print("  Accuracy = {:.2f}% (float in [0,100]) -- OK".format(acc))
 
-    # 4c. Weight re-initialisation
+    # check that re-initialising weights actually changes them
     w_before = clf.model.conv1.weight.data.clone()
     clf._reset_weights(seed=99)
     w_after = clf.model.conv1.weight.data.clone()
@@ -247,9 +223,7 @@ def test_classifier():
     print("  Weight re-initialisation changes parameters -- OK")
 
 
-# =============================================================================
-#  5. Full Pipeline (1 AL iteration on real CIFAR-10)
-# =============================================================================
+# 5. Full pipeline (1 AL iteration on real CIFAR-10)
 
 def test_full_pipeline():
     from src.simclr import SimCLRModel, get_features
@@ -261,7 +235,6 @@ def test_full_pipeline():
     device = torch.device("cpu")
     train_ds, test_ds = load_cifar10(root="data")
 
-    # Untrained SimCLR -- testing pipeline plumbing, not quality.
     model = SimCLRModel()
 
     train_sub = _Subset(train_ds, 500)
@@ -270,7 +243,6 @@ def test_full_pipeline():
     train_feats, train_labels = get_features(model, train_sub, batch_size=100,
                                               device=device, num_workers=0)
 
-    # Run 1 TypiClust round: select B=10
     selector = TypiClust(train_feats, max_clusters=500,
                          min_cluster_size=5, seed=42)
     selected = selector.select(10, labeled_indices=None)
@@ -279,7 +251,6 @@ def test_full_pipeline():
     assert selected.max() < 500, "Index out of range"
     print("  TypiClust selected 10 indices from 500 samples -- OK")
 
-    # Train classifier on selected examples.
     clf = CIFARClassifier(device=device, seed=42, num_workers=0)
     clf.train(selected, train_ds, epochs=5, batch_size=32,
               seed=42, verbose=False)
@@ -288,30 +259,24 @@ def test_full_pipeline():
     acc = eval_res["accuracy"]
     print("  Test accuracy after 1 round: {:.2f}%".format(acc))
 
-    # With 10 labels on a 10-class problem, accuracy should exceed 0%.
     assert acc > 0.0, "Accuracy is 0% -- model is broken"
     print("  Accuracy > 0% (pipeline produces predictions) -- OK")
 
 
-# =============================================================================
-#  6. Reproducibility
-# =============================================================================
+# 6. Reproducibility
 
 def test_reproducibility():
     from src.active_learning import TypiClust
     from src.utils import set_seed
 
-    # Create deterministic synthetic features.
     rng = np.random.default_rng(0)
     features = rng.standard_normal((200, 64)).astype(np.float32)
     features /= np.linalg.norm(features, axis=1, keepdims=True)
 
-    # Run 1: seed=42
     set_seed(42)
     sel1 = TypiClust(features, max_clusters=500, min_cluster_size=5, seed=42)
     idx1 = sel1.select(10, labeled_indices=None)
 
-    # Run 2: same seed
     set_seed(42)
     sel2 = TypiClust(features, max_clusters=500, min_cluster_size=5, seed=42)
     idx2 = sel2.select(10, labeled_indices=None)
@@ -322,7 +287,7 @@ def test_reproducibility():
     print("  Run 2: {}".format(idx2.tolist()))
     print("  Identical -- OK")
 
-    # Different seed should produce different results.
+    # different seed should give different results
     set_seed(99)
     sel3 = TypiClust(features, max_clusters=500, min_cluster_size=5, seed=99)
     idx3 = sel3.select(10, labeled_indices=None)
@@ -330,10 +295,6 @@ def test_reproducibility():
         "Different seeds produced identical results -- seeding may be broken"
     print("  Different seed -> different indices -- OK")
 
-
-# =============================================================================
-#  Main
-# =============================================================================
 
 if __name__ == "__main__":
     print("\n" + "#" * 60)
@@ -347,7 +308,6 @@ if __name__ == "__main__":
     run_test("5. Full Pipeline",             test_full_pipeline)
     run_test("6. Reproducibility",           test_reproducibility)
 
-    # Summary
     print("\n" + "=" * 60)
     print("SUMMARY")
     print("=" * 60)

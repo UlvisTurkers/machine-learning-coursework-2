@@ -1,6 +1,4 @@
-"""
-Utility functions: data loading, seeding, feature extraction, plotting, logging.
-"""
+# Utility functions: data loading, seeding, plotting, results I/O.
 
 from __future__ import annotations
 
@@ -18,12 +16,8 @@ from tqdm import tqdm
 from .simclr import SimCLRModel
 
 
-# ---------------------------------------------------------------------------
-# Reproducibility
-# ---------------------------------------------------------------------------
-
 def set_seed(seed: int = 42) -> None:
-    """Set seeds for Python, NumPy, and PyTorch (CPU + CUDA)."""
+    # set seeds for Python, NumPy, and PyTorch for reproducibility
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -32,26 +26,12 @@ def set_seed(seed: int = 42) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-# ---------------------------------------------------------------------------
-# Data loading
-# ---------------------------------------------------------------------------
-
 def load_cifar10(root: str = "./data") -> tuple:
-    """
-    Download and return raw CIFAR-10 train/test datasets (PIL images, no transform).
-
-    Returns:
-        (train_dataset, test_dataset) — torchvision CIFAR10 objects.
-    """
-    # No transform here; individual modules apply their own transforms.
+    # download and return raw CIFAR-10 train/test datasets (no transform applied)
     train = datasets.CIFAR10(root=root, train=True, download=True, transform=None)
     test = datasets.CIFAR10(root=root, train=False, download=True, transform=None)
     return train, test
 
-
-# ---------------------------------------------------------------------------
-# Feature extraction
-# ---------------------------------------------------------------------------
 
 def extract_features(
     dataset,
@@ -60,25 +40,12 @@ def extract_features(
     device: torch.device | None = None,
     num_workers: int = 2,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Extract L2-normalised 512-dim backbone features for every sample in `dataset`.
-
-    Delegates to `simclr.get_features`; kept here as a convenience import for
-    notebooks that do `from src.utils import extract_features`.
-
-    Returns:
-        features: np.ndarray (N, 512), L2-normalised, float32.
-        labels:   np.ndarray (N,), int64.
-    """
+    # convenience wrapper that delegates to simclr.get_features
     from .simclr import get_features as _get_features
     return _get_features(encoder, dataset,
                          batch_size=batch_size, device=device,
                          num_workers=num_workers)
 
-
-# ---------------------------------------------------------------------------
-# Plotting
-# ---------------------------------------------------------------------------
 
 def plot_accuracy_curve(
     labelled_counts: list[int],
@@ -87,19 +54,7 @@ def plot_accuracy_curve(
     save_path: str | Path | None = None,
     ax: plt.Axes | None = None,
 ) -> plt.Axes:
-    """
-    Plot test accuracy vs. number of labelled samples.
-
-    Args:
-        labelled_counts: X-axis values (number of labelled samples per round).
-        accuracies:      Y-axis values (test accuracy in [0, 1]).
-        label:           Legend label for this curve.
-        save_path:       If provided, save the figure to this path.
-        ax:              Existing Axes to draw on. Creates a new figure if None.
-
-    Returns:
-        The matplotlib Axes object.
-    """
+    # plot test accuracy vs number of labelled samples
     if ax is None:
         _, ax = plt.subplots(figsize=(8, 5))
 
@@ -122,13 +77,7 @@ def plot_comparison(
     results: dict[str, dict],
     save_path: str | Path | None = None,
 ) -> None:
-    """
-    Overlay multiple active learning curves on one plot.
-
-    Args:
-        results:   Mapping of {method_name: {'labelled_counts': [...], 'accuracies': [...]}}.
-        save_path: Optional path to save the figure.
-    """
+    # overlay multiple active learning curves on one plot
     _, ax = plt.subplots(figsize=(9, 6))
     for name, hist in results.items():
         plot_accuracy_curve(hist["labelled_counts"], hist["accuracies"], label=name, ax=ax)
@@ -139,12 +88,7 @@ def plot_comparison(
     plt.show()
 
 
-# ---------------------------------------------------------------------------
-# Results persistence
-# ---------------------------------------------------------------------------
-
 def save_results(history: dict, path: str | Path) -> None:
-    """Save an active learning history dict to a JSON file."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
@@ -153,17 +97,11 @@ def save_results(history: dict, path: str | Path) -> None:
 
 
 def load_results(path: str | Path) -> dict:
-    """Load an active learning history dict from a JSON file."""
     with open(path) as f:
         return json.load(f)
 
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
 def log(msg: str, level: str = "INFO") -> None:
-    """Simple timestamped console logger."""
     import datetime
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     print(f"[{ts}] [{level}] {msg}")

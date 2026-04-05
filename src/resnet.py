@@ -1,27 +1,15 @@
-"""
-ResNet-18 backbone for CIFAR-10.
-
-The canonical SimCLR model (encoder + projection head) lives in simclr.py.
-This module provides LinearClassifier for supervised evaluation on top of
-a frozen SimCLRModel backbone.
-"""
+# ResNet-18 backbone for CIFAR-10.
+# SimCLRModel lives in simclr.py; this module provides LinearClassifier
+# for supervised evaluation on top of a frozen SimCLR backbone.
 
 import torch
 import torch.nn as nn
 
-# SimCLRModel is defined in simclr.py to keep all SimCLR logic together.
-# Import it here so the rest of the codebase can do `from src.resnet import ...`.
-from .simclr import SimCLRModel  # noqa: F401  (re-exported for convenience)
+from .simclr import SimCLRModel  # noqa: F401
 
 
 class LinearClassifier(nn.Module):
-    """
-    Frozen SimCLR backbone + single linear head for supervised evaluation.
-
-    Args:
-        model:       Trained SimCLRModel whose encoder will be frozen.
-        num_classes: Number of output classes (default 10 for CIFAR-10).
-    """
+    # frozen SimCLR backbone + single linear head for evaluation
 
     def __init__(self, model: SimCLRModel, num_classes: int = 10):
         super().__init__()
@@ -33,5 +21,5 @@ class LinearClassifier(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
-            h = self.encoder(x).flatten(1)  # (B, 512)
+            h = self.encoder(x).flatten(1)
         return self.fc(h)
