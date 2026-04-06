@@ -263,6 +263,138 @@ class CIFARClassifier:
         return train_history, eval_results
 
 
+class LinearClassifier:
+    # linear head trained on frozen SimCLR features (Framework 2).
+    # Unlike CIFARClassifier, this works directly on pre-extracted feature
+    # vectors so no image augmentation or CNN training is involved.
+
+    def __init__(
+        self,
+        input_dim: int = 512,
+        num_classes: int = 10,
+        device: str | torch.device | None = None,
+        seed: int = 42,
+        num_workers: int = 0,
+    ):
+        self.input_dim   = input_dim
+        self.num_classes = num_classes
+        self.device = (
+            torch.device(device) if isinstance(device, str)
+            else (device or torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        )
+        self.seed        = seed
+        self.num_workers = num_workers
+        self.model: nn.Module = self._build_model()
+
+    def _build_model(self) -> nn.Module:
+        return nn.Linear(self.input_dim, self.num_classes).to(self.device)
+
+    def _reset_weights(self, seed: int) -> None:
+        torch.manual_seed(seed)
+        self.model = self._build_model()
+
+    def train(
+        self,
+        labeled_indices: np.ndarray,
+        all_features: np.ndarray,
+        all_labels: np.ndarray,
+        epochs: int = 100,
+        lr: float = 0.1,
+        batch_size: int = 256,
+        weight_decay: float = 5e-4,
+        seed: int | None = None,
+    ) -> dict:
+        # train on the subset of features selected by labeled_indices
+        _seed = seed if seed is not None else self.seed
+        self._reset_weights(_seed)
+
+        labeled_indices = np.asarray(labeled_indices, dtype=np.int64)
+        X = torch.tensor(all_features[labeled_indices], dtype=torch.float32)
+        y = torch.tensor(all_labels[labeled_indices],   dtype=torch.long)
+
+        loader = DataLoader(
+            TensorDataset(X, y),
+            batch_size=min(batch_size, len(X)),
+            shuffle=True,
+            num_workers=self.num_workers,
+        )
+
+        optimizer = torch.optim.SGD(
+            self.model.parameters(),
+            lr=lr,
+            momentum=0.9,
+            weight_decay=weight_decay,
+        )
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer, T_max=epochs, eta_min=0.0
+        )
+        criterion = nn.CrossEntropyLoss()
+
+        history: dict[str, list] = {"train_loss": [], "train_acc": []}
+        for epoch in range(epochs):
+            self.model.train()
+            running_loss = correct = total = 0
+            for xb, yb in loader:
+                xb, yb = xb.to(self.device), yb.to(self.device)
+                logits = self.model(xb)
+                loss   = criterion(logits, yb)
+
+                optimizer.zero_grad(set_to_none=True)
+                loss.backward()
+                optimizer.step()
+
+                running_loss += loss.item() * len(yb)
+                correct      += (logits.argmax(1) == yb).sum().item()
+                total        += len(yb)
+
+            scheduler.step()
+            history["train_loss"].append(running_loss / total)
+            history["train_acc"].append(correct / total)
+
+        return history
+
+    def evaluate(
+        self,
+        test_features: np.ndarray,
+        test_labels: np.ndarray,
+        batch_size: int = 512,
+    ) -> dict:
+        # evaluate on test features, returns accuracy and per-class breakdown
+        X = torch.tensor(test_features, dtype=torch.float32)
+        y = torch.tensor(test_labels,   dtype=torch.long)
+        loader = DataLoader(
+            TensorDataset(X, y),
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+        )
+
+        self.model = self.model.to(self.device).eval()
+        all_preds, all_targets = [], []
+        with torch.no_grad():
+            for xb, yb in loader:
+                preds = self.model(xb.to(self.device)).argmax(dim=1).cpu().numpy()
+                all_preds.append(preds)
+                all_targets.append(yb.numpy())
+
+        preds   = np.concatenate(all_preds)
+        targets = np.concatenate(all_targets)
+
+        overall_acc = float((preds == targets).mean() * 100)
+
+        per_class = np.zeros(self.num_classes, dtype=np.float64)
+        for c in range(self.num_classes):
+            mask = targets == c
+            per_class[c] = float((preds[mask] == targets[mask]).mean() * 100) if mask.any() else 0.0
+
+        return {
+            "accuracy":      overall_acc,
+            "per_class_acc": per_class,
+            "predictions":   preds,
+            "targets":       targets,
+        }
+
+
 def evaluate_multiple_seeds(
     train_indices: np.ndarray,
     train_dataset,
