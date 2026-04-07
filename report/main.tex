@@ -45,9 +45,8 @@
   tabsize=4, showstringspaces=false,
 }
 
-% =============================================================================
-%  TITLE PAGE (does not count toward 2-page limit)
-% =============================================================================
+
+
 \begin{document}
 \onecolumn
 \thispagestyle{empty}
@@ -77,9 +76,8 @@
 \twocolumn
 \setcounter{page}{1}
 
-% =============================================================================
+
 %  PAGE 1
-% =============================================================================
 
 \section{Introduction}
 \label{sec:intro}
@@ -110,7 +108,7 @@ We reproduce \typiclust{} on CIFAR-10 under two evaluation frameworks,
 compare against random and published baselines, and propose a cosine
 typicality modification for L2-normalised feature spaces.
 
-% ─────────────────────────────────────────────────────────────────────────────
+
 \section{Methodology}
 \label{sec:method}
 
@@ -175,9 +173,9 @@ scratch), (ii)~linear classifier on frozen \simclr{} features, and
 (iii)~semi-supervised (FlexMatch).  We reproduce (i) and (ii);
 (iii) is omitted due to computational constraints.
 
-% =============================================================================
+
 %  PAGE 2
-% =============================================================================
+
 
 \section{Results}
 \label{sec:results}
@@ -338,9 +336,8 @@ typicality catches up as budgets increase.  This suggests clustering
 and diversity, rather than the specific distance metric, are the
 primary drivers of \typiclust{}'s success.
 
-% =============================================================================
-%  REFERENCES (does not count toward 2-page limit)
-% =============================================================================
+
+
 \bibliographystyle{IEEEtran}
 \begin{thebibliography}{10}
 
