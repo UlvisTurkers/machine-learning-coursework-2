@@ -57,7 +57,8 @@
   {\LARGE\bfseries Implementing and Improving TypiClust:\\[4pt]
    Active Learning in the Low-Budget Regime\par}
   \vspace{1.2cm}
-  {\large [Student Name] \quad -- \quad [Student ID]}\\[6pt]
+  % ── UPDATE THESE ──
+  {\large Ulvis Edijs Turkers \quad -- \quad K24054565}\\[6pt]
   {\large Module: 5CCSAMLF Machine Learning}\\[6pt]
   {\large \today}
   \vspace{1.5cm}
@@ -118,7 +119,7 @@ The \tpcrp{} variant operates in three stages.
 \smallskip\noindent\textbf{Stage 1: Representation Learning.}\quad
 A \simclr{} encoder (ResNet-18~\cite{he2016resnet}, 3$\times$3 stem, no
 max-pool) is trained on the full unlabeled pool with NT-Xent loss
-($\tau{=}0.5$, SGD, lr$=$0.4, cosine schedule, 500 epochs, batch 512).
+($\tau{=}0.5$, SGD, lr$=$0.4, cosine schedule, 460 epochs, batch 512).
 The 512-dim features are L2-normalised and cached.
 
 \smallskip\noindent\textbf{Stage 2: Clustering.}\quad
@@ -181,10 +182,10 @@ scratch), (ii)~linear classifier on frozen \simclr{} features, and
 \section{Results}
 \label{sec:results}
 
-\noindent\textbf{Framework 1.}\quad
+\noindent\textbf{Framework 1 (Fully Supervised).}\quad
 A ResNet-18 is trained from scratch (SGD, Nesterov, lr$=$0.025,
-200 epochs) each round.  Table~\ref{tab:results} compares our results,
-the random baseline, and published paper results.
+200 epochs) each round.  Table~\ref{tab:results} compares our results
+with the random baseline and published paper results.
 
 \begin{table}[t]
 \centering
@@ -198,9 +199,9 @@ the random baseline, and published paper results.
 \toprule
 & Src & 10 & 20 & 30 & 40 & 50 \\
 \midrule
-TPC\_RP & Ours & $\mathbf{16.0{\scriptstyle\pm1.3}}$ & $\mathbf{19.6{\scriptstyle\pm1.6}}$ & $\mathbf{20.8{\scriptstyle\pm0.8}}$ & $\mathbf{22.8{\scriptstyle\pm1.0}}$ & $22.2{\scriptstyle\pm1.4}$ \\
+TPC\_RP & Ours & $\mathbf{16.6{\scriptstyle\pm0.7}}$ & $\mathbf{19.5{\scriptstyle\pm0.1}}$ & $\mathbf{21.3{\scriptstyle\pm0.4}}$ & $\mathbf{23.2{\scriptstyle\pm0.8}}$ & $\mathbf{23.7{\scriptstyle\pm0.2}}$ \\
 TPC\_RP & Paper & ${\sim}28$ & ${\sim}30$ & ${\sim}31$ & ${\sim}32$ & ${\sim}33$ \\
-Random & Ours & $14.8{\scriptstyle\pm2.9}$ & $17.4{\scriptstyle\pm2.0}$ & $19.8{\scriptstyle\pm1.7}$ & $21.0{\scriptstyle\pm0.5}$ & $22.2{\scriptstyle\pm1.4}$ \\
+Random & Ours & $14.8{\scriptstyle\pm2.4}$ & $17.4{\scriptstyle\pm1.7}$ & $19.8{\scriptstyle\pm1.4}$ & $21.0{\scriptstyle\pm0.4}$ & $22.2{\scriptstyle\pm1.2}$ \\
 Random & Paper & ${\sim}17$ & ${\sim}19$ & ${\sim}22$ & ${\sim}24$ & ${\sim}26$ \\
 \midrule
 \multicolumn{7}{@{}l}{\scriptsize\textit{Paper-reported baselines (not reproduced):}} \\
@@ -212,44 +213,55 @@ Uncert. & Paper & ${\sim}15$ & ${\sim}17$ & ${\sim}19.5$ & ${\sim}21$ & ${\sim}2
 \end{table}
 
 \typiclust{} outperforms random at every budget, with the largest gap
-at $B{=}40$ ($+1.7\%$).  Our absolute accuracies are lower than the
-paper's due to fewer \simclr{} epochs; the relative ordering matches.
-All uncertainty-based baselines perform at or below random, confirming
-the cold-start effect.
-Framework~2 (linear on frozen features) shows the same trend.
-Fig.~\ref{fig:acc-budget} visualises the curves; further plots appear
-in Appendix~A.
+at $B{=}40$ ($+2.1\%$) and $B{=}20$ ($+2.0\%$).  Our absolute
+accuracies are lower than the paper's due to training \simclr{} for
+460 instead of 500 epochs; the \emph{relative} ordering matches.
+All uncertainty-based baselines perform at or below random in the
+paper, confirming the cold-start effect.
+
+\noindent\textbf{Framework 2 (Linear on Frozen Features).}\quad
+A linear classifier (lr$=$0.1, 100 epochs) on frozen features shows a
+much larger gap: \typiclust{} reaches 80.9\% at $B{=}50$ versus
+60.1\% for random ($+20.8\%$), confirming that selection quality is
+the primary factor when the classifier is lightweight.
+Fig.~\ref{fig:acc-budget} visualises the Framework~1 curves; further
+plots appear in Appendix~A.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.92\columnwidth]{../plots/accuracy_vs_budget.pdf}
-  \caption{\typiclust{} vs.\ random, $\pm$1 std shading (3 seeds).}
+  \includegraphics[width=0.92\columnwidth]{plots/modified_accuracy_vs_budget.pdf}
+  \caption{\typiclust{} vs.\ random, $\pm$1 std shading (3 seeds, FW1).}
   \label{fig:acc-budget}
 \end{figure}
 
 \section{Statistical Analysis}
 \label{sec:stats}
 
-Paired $t$-tests across 3 seeds (Table~\ref{tab:stats}) show medium to
-large effect sizes at budgets 10--40.  At $B{=}50$ the gap vanishes,
-matching the phase-transition prediction.  With only 3 seeds,
-$p$-values are conservative; 10 seeds would likely reach significance.
+Paired $t$-tests across 3 seeds (Table~\ref{tab:stats}) show that the
+cosine modification achieves significance at $B{=}40$
+($p{=}0.029$, $d{=}3.30$) against random.
+The original-vs-cosine comparison shows a near-significant large effect
+at $B{=}10$ ($p{=}0.074$, $d{=}2.00$), where the Euclidean variant
+selects better initial examples.  With only 3 seeds, $p$-values are
+conservative; 10 seeds would tighten confidence intervals.
 
 \begin{table}[t]
 \centering
-\caption{Paired $t$-test: \typiclust{} vs.\ Random (FW1).}
+\caption{Statistical tests from modified notebook (3 seeds).}
 \label{tab:stats}
 \scriptsize
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabular}{@{}rcccc@{}}
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}rcccccc@{}}
 \toprule
-$B$ & $t$ & $p$ & Cohen's $d$ & Effect \\
+& \multicolumn{3}{c}{Orig vs.\ Cosine} & \multicolumn{3}{c}{Cosine vs.\ Random} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}
+$B$ & $t$ & $p$ & $d$ & $t$ & $p$ & $d$ \\
 \midrule
-10 & 1.28 & 0.328 & 0.74 & medium \\
-20 & 1.89 & 0.199 & 1.09 & large \\
-30 & 0.71 & 0.553 & 0.41 & small \\
-40 & 1.96 & 0.189 & 1.13 & large \\
-50 & 0.02 & 0.986 & 0.01 & negl. \\
+10 & $-3.47$ & 0.074 & $-2.00$ & $-0.13$ & 0.907 & $-0.08$ \\
+20 & $-0.99$ & 0.426 & $-0.57$ & $0.96$ & 0.439 & $0.55$ \\
+30 & $-1.42$ & 0.293 & $-0.82$ & $0.69$ & 0.564 & $0.40$ \\
+40 & $-0.79$ & 0.514 & $-0.45$ & $5.72$ & \textbf{0.029} & $3.30$ \\
+50 & $2.01$ & 0.183 & $1.16$ & $2.54$ & 0.126 & $1.47$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -277,9 +289,7 @@ while cosine uses $\text{mean}(s_i)$ where neighbours contribute
 equally, offering more robustness to outliers.
 
 We evaluate under both frameworks using the same features, seeds, and
-budgets (Table~\ref{tab:mod}).  Both variants outperform random,
-confirming the typicality principle is robust to the distance metric.
-The modification adds negligible computational overhead.
+budgets (Table~\ref{tab:mod}).
 
 \begin{table}[t]
 \centering
@@ -291,29 +301,42 @@ The modification adds negligible computational overhead.
 \toprule
 $B$ & Original & Cosine & Random & $\Delta_\text{mod}$ \\
 \midrule
-% ── UPDATE after running tpcrp_modified.ipynb with full SimCLR ──
-10 & 16.0 & \textbf{XX.X} & 14.8 & $+$X.X \\
-20 & 19.6 & \textbf{XX.X} & 17.4 & $+$X.X \\
-30 & 20.8 & \textbf{XX.X} & 19.8 & $+$X.X \\
-40 & 22.8 & \textbf{XX.X} & 21.0 & $+$X.X \\
-50 & 22.2 & \textbf{XX.X} & 22.2 & $+$X.X \\
+10 & $\mathbf{16.6}$ & $14.5$ & $14.8$ & $-2.0$ \\
+20 & $\mathbf{19.5}$ & $18.6$ & $17.4$ & $-0.8$ \\
+30 & $\mathbf{21.3}$ & $20.6$ & $19.8$ & $-0.7$ \\
+40 & $\mathbf{23.2}$ & $22.8$ & $21.0$ & $-0.4$ \\
+50 & $23.7$ & $\mathbf{24.9}$ & $22.2$ & $+1.3$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Future work could combine typicality with uncertainty as the budget
-grows (exploiting the phase transition), test on CIFAR-100, replace
-$K$-Means with HDBSCAN, or extend to the semi-supervised framework.
+The cosine variant underperforms Euclidean at low budgets ($B{\leq}40$)
+but \emph{overtakes} it at $B{=}50$ ($+1.3\%$).  This suggests the
+inverse-mean aggregation in Euclidean typicality is more aggressive at
+identifying the single densest point when clusters are large (low $B$),
+while the linear cosine average becomes advantageous as clusters shrink
+and outlier sensitivity matters more.  Under Framework~2, both variants
+dramatically outperform random (e.g.\ 80.9\% vs.\ 60.1\% at $B{=}50$),
+confirming the core typicality principle is robust to metric choice.
+
+\smallskip\noindent\textbf{Future work.}\quad
+A more impactful modification would combine typicality with uncertainty
+as the budget grows, exploiting the phase transition.  Further work
+could test on CIFAR-100, replace $K$-Means with HDBSCAN, or extend to
+the semi-supervised framework.
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-We reproduced \typiclust{} on CIFAR-10 under two frameworks and
-confirmed that typicality-based selection outperforms random sampling at
-low budgets.  Published baselines confirm all model-dependent methods
-perform at or below random in this regime.  Our cosine modification
-shows the typicality principle is robust to the distance metric,
-suggesting clustering and diversity drive \typiclust{}'s success.
+We reproduced \typiclust{} on CIFAR-10 under two evaluation frameworks
+and confirmed that typicality-based selection outperforms random
+sampling at low budgets.  Published baselines confirm all
+model-dependent methods perform at or below random in this regime.
+Our cosine modification reveals that the Euclidean inverse-mean
+aggregation is slightly superior at very low budgets, while cosine
+typicality catches up as budgets increase.  This suggests clustering
+and diversity, rather than the specific distance metric, are the
+primary drivers of \typiclust{}'s success.
 
 % =============================================================================
 %  REFERENCES (does not count toward 2-page limit)
@@ -365,51 +388,62 @@ in \emph{Proc.\ ICML}, 2020.
 \end{thebibliography}
 
 
-% =============================================================================
-%  APPENDIX (does not count toward 2-page limit)
-% =============================================================================
+
 \clearpage
 \onecolumn
 \appendix
 \section*{Appendix A: Additional Plots}
 
-% Uncomment once plot files are available. These still receive marks (Q\&A Ans\,4).
+ Uncomment once plot files are in the correct paths.
+ All plots here still count toward the 10 marks for Plots (per Q\&A Ans\,4).
 
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics[width=0.6\textwidth]{../plots/tsne_simclr_features.pdf}
-%   \caption{t-SNE of SimCLR features coloured by ground-truth class.}
-% \end{figure}
-%
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics[width=0.6\textwidth]{../plots/tsne_selected.pdf}
-%   \caption{TypiClust selections overlaid on t-SNE projection.}
-% \end{figure}
-%
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics[width=0.6\textwidth]{../plots/fw2_accuracy_vs_budget.pdf}
-%   \caption{Framework 2: linear classifier on frozen SimCLR features.}
-% \end{figure}
-%
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics[width=0.6\textwidth]{../plots/modified_accuracy_vs_budget.pdf}
-%   \caption{Original vs.\ modified (cosine) typicality comparison.}
-% \end{figure}
-%
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics[width=0.6\textwidth]{../plots/per_class_accuracy.pdf}
-%   \caption{Per-class accuracy at budget 50 (seed 0).}
-% \end{figure}
-%
-% \begin{figure}[h]
-%   \centering
-%   \includegraphics[width=0.6\textwidth]{../plots/statistical_analysis.pdf}
-%   \caption{Paired $t$-test $p$-values and Cohen's $d$ across budgets.}
-% \end{figure}
+ \begin{figure}[h]
+   \centering
+   \includegraphics[width=0.6\textwidth]{plots/tsne_simclr_features.jpg}
+   \caption{t-SNE of SimCLR features coloured by ground-truth class (460 epochs).}
+ \end{figure}
+
+ \begin{figure}[h]
+   \centering
+   \includegraphics[width=0.6\textwidth]{plots/tsne_selected.jpg}
+   \caption{TypiClust selected examples overlaid on t-SNE projection.}
+ \end{figure}
+
+ \begin{figure}[h]
+   \centering
+   \includegraphics[width=0.6\textwidth]{plots/accuracy_vs_budget.pdf}
+   \caption{Framework 2: linear classifier on frozen SimCLR features.}
+ \end{figure}
+
+ \begin{figure}[h]
+   \centering
+   \includegraphics[width=0.6\textwidth]{plots/fw1_comparison.pdf}
+   \caption{Original (Euclidean) vs.\ modified (cosine) typicality, FW1.}
+ \end{figure}
+
+ \begin{figure}[h]
+   \centering
+   \includegraphics[width=0.6\textwidth]{plots/fw2_comparison.pdf}
+   \caption{Original vs.\ modified typicality, Framework 2.}
+ \end{figure}
+
+ \begin{figure}[h]
+   \centering
+   \includegraphics[width=0.6\textwidth]{plots/delta_bar.pdf}
+   \caption{Accuracy difference: cosine minus Euclidean typicality per budget.}
+ \end{figure}
+
+ \begin{figure}[h]
+   \centering
+   \includegraphics[width=0.6\textwidth]{plots/statistical.pdf}
+   \caption{$p$-values and Cohen's $d$ for both comparisons across budgets.}
+ \end{figure}
+
+ \begin{figure}[h]
+   \centering
+   \includegraphics[width=0.6\textwidth]{plots/per_class_accuracy.jpg}
+   \caption{Per-class accuracy at budget 50 (seed 0).}
+ \end{figure}
 
 
 \clearpage
