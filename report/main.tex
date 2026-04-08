@@ -16,7 +16,9 @@
 \usepackage{microtype}
 \usepackage{enumitem}
 \usepackage{listings}
+\usepackage{pdfpages}
 \setlist{nosep, leftmargin=*}
+
 
 % Tight spacing
 \setlength{\textfloatsep}{5pt plus 1pt minus 1pt}
@@ -227,7 +229,7 @@ plots appear in Appendix~A.
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.92\columnwidth]{plots/modified_accuracy_vs_budget.pdf}
+  \includegraphics[width=0.92\columnwidth]{plots/accuracy_vs_budget.pdf}
   \caption{\typiclust{} vs.\ random, $\pm$1 std shading (3 seeds, FW1).}
   \label{fig:acc-budget}
 \end{figure}
@@ -391,8 +393,7 @@ in \emph{Proc.\ ICML}, 2020.
 \appendix
 \section*{Appendix A: Additional Plots}
 
- Uncomment once plot files are in the correct paths.
- All plots here still count toward the 10 marks for Plots (per Q\&A Ans\,4).
+
 
  \begin{figure}[h]
    \centering
@@ -406,17 +407,7 @@ in \emph{Proc.\ ICML}, 2020.
    \caption{TypiClust selected examples overlaid on t-SNE projection.}
  \end{figure}
 
- \begin{figure}[h]
-   \centering
-   \includegraphics[width=0.6\textwidth]{plots/accuracy_vs_budget.pdf}
-   \caption{Framework 2: linear classifier on frozen SimCLR features.}
- \end{figure}
 
- \begin{figure}[h]
-   \centering
-   \includegraphics[width=0.6\textwidth]{plots/fw1_comparison.pdf}
-   \caption{Original (Euclidean) vs.\ modified (cosine) typicality, FW1.}
- \end{figure}
 
  \begin{figure}[h]
    \centering
@@ -438,7 +429,7 @@ in \emph{Proc.\ ICML}, 2020.
 
  \begin{figure}[h]
    \centering
-   \includegraphics[width=0.6\textwidth]{plots/per_class_accuracy.jpg}
+   \includegraphics[width=1.0\textwidth]{plots/per_class_accuracy.jpg}
    \caption{Per-class accuracy at budget 50 (seed 0).}
  \end{figure}
 
@@ -446,26 +437,35 @@ in \emph{Proc.\ ICML}, 2020.
 \clearpage
 \section*{Appendix B: Code Listings}
 
-\noindent Complete runnable code:
+\noindent Complete runnable code: \\
 \url{https://github.com/UlvisTurkers/machine-learning-coursework-2}
 
-\smallskip\noindent Project structure:
-\begin{verbatim}
-machine-learning-coursework-2/
-  notebooks/
-    tpcrp_original.ipynb  -- Original TypiClust
-    tpcrp_modified.ipynb  -- Cosine modification
-  src/
-    simclr.py             -- SimCLR training
-    resnet.py             -- ResNet-18 backbone
-    typicality.py         -- Typicality (Euclid + Cosine)
-    active_learning.py    -- TypiClust + baselines
-    classifier.py         -- CIFARClassifier + LinearClassifier
-    utils.py              -- Data loading, seeding, logging
-\end{verbatim}
+\includepdf[pages=1, pagecommand={\subsection*{tpcrp\_original.ipynb}}]{tpcrp_original.pdf}
+\includepdf[pages=2-]{tpcrp_original.pdf}
 
-% Paste source code or notebook printouts below.
-% \subsection*{src/simclr.py}
-% \lstinputlisting[language=Python]{../src/simclr.py}
+\includepdf[pages=1, pagecommand={\subsection*{tpcrp\_modified.ipynb}}]{tpcrp_modified.pdf}
+\includepdf[pages=2-]{tpcrp_modified.pdf}
+
+\clearpage
+\subsection*{src/active\_learning.py}
+\lstinputlisting[language=Python, breaklines=true, basicstyle=\ttfamily\scriptsize]{src/active_learning.py}
+
+\subsection*{src/classifier.py}
+\lstinputlisting[language=Python, breaklines=true, basicstyle=\ttfamily\scriptsize]{src/classifier.py}
+
+\subsection*{src/plotting.py}
+\lstinputlisting[language=Python, breaklines=true, basicstyle=\ttfamily\scriptsize]{src/plotting.py}
+
+\subsection*{src/resnet.py}
+\lstinputlisting[language=Python, breaklines=true, basicstyle=\ttfamily\scriptsize]{src/resnet.py}
+
+\subsection*{src/simclr.py}
+\lstinputlisting[language=Python, breaklines=true, basicstyle=\ttfamily\scriptsize]{src/simclr.py}
+
+\subsection*{src/typicality.py}
+\lstinputlisting[language=Python, breaklines=true, basicstyle=\ttfamily\scriptsize]{src/typicality.py}
+
+\subsection*{src/utils.py}
+\lstinputlisting[language=Python, breaklines=true, basicstyle=\ttfamily\scriptsize]{src/utils.py}
 
 \end{document}
